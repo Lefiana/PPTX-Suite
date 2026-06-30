@@ -1,2 +1,17 @@
+# Ignore specific file types
+metadata.json
 *.pptx
 *.xlsx
+
+# Python/Project specific ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+env/
+venv/
+.vscode/
+.idea/
+.DS_Store
