@@ -1,4 +1,5 @@
 # Ignore specific file types
+./data/*
 metadata.json
 *.pptx
 *.xlsx
