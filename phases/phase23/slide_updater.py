@@ -7,10 +7,15 @@ cropping.  No tkinter imports — fully unit-testable.
 """
 from __future__ import annotations
 from typing import Callable, Optional
+import logging
+from pathlib import Path
 from PIL import Image
+from pptx import Presentation
 
 from core.image_processor import ImageProcessor
 from core.pptx_engine import PPTXEngine
+
+logger = logging.getLogger(__name__)
 
 
 class SlideUpdater:
@@ -86,6 +91,45 @@ class SlideUpdater:
         stream = self.image_processor.crop_to_stream(
             image_path, ratio, fd_cfg, manual_face_center
         )
-        return self.pptx_engine.reinject_image(
-            pptx_path, slide_index, portrait_shape_id, stream, layout
+        return self.replace_slide_image(pptx_path, slide_index, portrait_shape_id, stream)
+
+    def replace_slide_image(self, pptx_path, slide_index, portrait_shape_id, image_stream) -> int:
+        path = Path(pptx_path)
+        if not path.exists():
+            logger.error("replace_slide_image: PPTX not found: %s", pptx_path)
+            raise FileNotFoundError(f"PPTX not found: {pptx_path}")
+        
+        try:
+            prs = Presentation(pptx_path)
+        except Exception as exc:
+            logger.exception("replace_slide_image: failed to open PPTX %s", pptx_path)
+            raise RuntimeError(f"Could not open PPTX (it may be corrupted): {exc}") from exc
+
+        if not (0 <= slide_index < len(prs.slides)):
+            logger.error("replace_slide_image: slide_index %s out of range (deck has %s slides) in %s",
+                         slide_index, len(prs.slides), pptx_path)
+            raise IndexError(f"Slide index {slide_index} out of range (deck has {len(prs.slides)} slides).")
+
+        slide = prs.slides[slide_index]
+        if not any(shape.shape_id == portrait_shape_id for shape in slide.shapes):
+            logger.error("replace_slide_image: shape_id %s not found on slide %s in %s",
+                         portrait_shape_id, slide_index, pptx_path)
+            raise ValueError(f"Portrait shape id {portrait_shape_id} not found on slide {slide_index}.")
+
+        layout = self.cfg.load_layout_config()
+        try:
+            return self.pptx_engine.reinject_image(
+                pptx_path, slide_index, portrait_shape_id, image_stream, layout)
+        except Exception as exc:
+            logger.exception("replace_slide_image: reinjection failed for slide %s in %s",
+                             slide_index, pptx_path)
+            raise RuntimeError(f"Portrait replacement failed: {exc}") from exc
+
+    def update_student_slide(self, student: dict, image_stream) -> int:
+        missing = [k for k in ("pptx_path", "slide_index", "portrait_shape_id") if k not in student]
+        if missing:
+            raise KeyError(f"Student record missing required field(s): {missing}")
+        return self.replace_slide_image(
+            student["pptx_path"], student["slide_index"],
+            student["portrait_shape_id"], image_stream,
         )

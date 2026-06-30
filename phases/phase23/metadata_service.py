@@ -9,6 +9,7 @@ Owns:
   • Convenience accessors for the QA workflow's session keys.
   • Student-ID assignment and ID-based lookup/update helpers.
   • Review statistics aggregation for the toolbar counters.
+  • Persistent slide/pptx association management.
 
 All reads/writes to metadata.json happen exclusively through this module
 (via the injected MetadataManager) — no other Phase 2+3 module touches
@@ -172,7 +173,7 @@ class MetadataService:
         """
         Reads the current on-disk student list and returns a full status
         breakdown:  {reviewed, total, failed, skipped, pending,
-                     generated, overridden, placeholder}
+                      generated, overridden, placeholder}
         """
         students = self._mm.get_students()
         total    = len(students)

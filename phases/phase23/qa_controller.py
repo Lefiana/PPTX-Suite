@@ -37,7 +37,7 @@ class QASuiteFrame(ttk.Frame):
         super().__init__(parent)
         self.app = app
 
-        self.slide_updater   = SlideUpdater(app.config_manager)
+        self.slide_updater  = SlideUpdater(app.config_manager)
         self.metadata_service = MetadataService(app.metadata_manager)
 
         # ── runtime state ────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ class QASuiteFrame(ttk.Frame):
         sb = tk.Frame(self, bg="#dde3ea", pady=3)
         sb.pack(fill=tk.X, side=tk.BOTTOM)
         ttk.Label(sb, textvariable=self._status_var,
-                 background="#dde3ea", foreground=SUB_FG).pack(side=tk.LEFT, padx=12)
+                  background="#dde3ea", foreground=SUB_FG).pack(side=tk.LEFT, padx=12)
 
     # ── Path dialogs ──────────────────────────────────────────────────────────
 
@@ -290,46 +290,33 @@ class QASuiteFrame(ttk.Frame):
         )
 
     # ── Reusable override-application orchestrator ───────────────────────────
-    #
-    # This is the generic workflow described by the Live PPT Reinjection
-    # Infrastructure: given a ready-made image_stream for the currently
-    # selected student, surgically patch ONLY that student's slide, persist
-    # the slide mapping, and refresh ONLY the current row + preview.
-    #
-    # Today's face-click override (_on_apply_override below) still calls
-    # slide_updater.reinject_portrait() directly because it needs to perform
-    # the face-crop itself before an image_stream exists. Any future override
-    # mechanism that already produces a finished image_stream up front — most
-    # notably the planned manual crop/tilt editor — should call this method
-    # instead of reimplementing the lookup/update/persist/refresh sequence.
 
     def _apply_corrected_image(self, image_stream, new_status: str = "overridden") -> bool:
         """
         Applies image_stream as the new portrait for the currently selected
-        student. Returns True on success, False on failure (a user-facing
-        error dialog has already been shown in the failure case).
+        student. Returns True on success, False if check fails or update errors.
+        This is the method the upcoming crop/tilt editor will call.
         """
         if self._current_idx < 0:
             return False
         s = self._students[self._current_idx]
         if not self._check_pptx_ready(s):
             return False
-
+        
         s["pptx_path"] = self.toolbar.get_paths()["output"]
-
         try:
             new_shape_id = self.slide_updater.update_student_slide(s, image_stream)
         except Exception as exc:
             show_error("Slide Update Failed", str(exc))
             return False
-
+        
         s["portrait_shape_id"] = new_shape_id
         s["status"]            = new_status
         self.metadata_service.save_students(self._students)
-
+        
         if s.get("student_id"):
             self.metadata_service.set_slide_info(s["student_id"], s["slide_index"], s["pptx_path"])
-
+        
         self._refresh_tree_row(self._current_idx)
         self._refresh_preview()
         self._update_review_stats()
