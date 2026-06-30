@@ -1,0 +1,38 @@
+{
+  "portrait": {
+    "left_cm": 29.79,
+    "top_cm": 2.58,
+    "width_cm": 17.27,
+    "height_cm": 23.43
+  },
+  "shapes": {
+    "surname": "TextBox 6",
+    "firstname": "TextBox 7",
+    "course": "TextBox 8"
+  },
+  "excel": {
+    "header_row": 3,
+    "name_column": "STUDENT NAME",
+    "program_column": "PROGRAM"
+  },
+  "face_detection": {
+    "top_padding_factor": 0.7,
+    "bottom_padding_factor": 1.8,
+    "min_face_fraction": 0.08,
+    "max_face_fraction": 0.8,
+    "horizontal_margin": 0.15,
+    "vertical_limit": 0.6
+  },
+  "program_mapping": {
+    "BMMA": "Bachelor of Multimedia Arts",
+    "BSA": "Bachelor of Science in Accountancy",
+    "BSCS": "Bachelor of Science in Computer Science",
+    "BSIT": "Bachelor of Science in Information Technology",
+    "BSBA": "Bachelor of Science in Business Administration",
+    "BSED": "Bachelor of Secondary Education",
+    "BEED": "Bachelor of Elementary Education",
+    "BSCRIM": "Bachelor of Science in Criminology",
+    "BSN": "Bachelor of Science in Nursing",
+    "BSME": "Bachelor of Science in Marine Engineering"
+  }
+}

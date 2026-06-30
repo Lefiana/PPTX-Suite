@@ -1,0 +1,9 @@
+# Graduation Slide Automation Suite — Python dependencies
+# Install with:  pip install -r requirements.txt
+
+python-pptx>=0.6.21
+pandas>=1.5.0
+openpyxl>=3.0.0          # pandas Excel engine
+opencv-python>=4.6.0     # face detection
+Pillow>=9.0.0            # image processing + tkinter display
+numpy>=1.23.0            # opencv array bridge
