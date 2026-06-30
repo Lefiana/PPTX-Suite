@@ -18,6 +18,7 @@ class Toolbar(tk.Frame):
             on_browse_excel=..., on_browse_template=...,
             on_browse_master=..., on_set_output=...,
             on_load_students=..., on_generate=...,
+            on_open_output_folder=...,
         )
         toolbar.pack(fill=tk.X)
     """
@@ -25,12 +26,13 @@ class Toolbar(tk.Frame):
     def __init__(
         self,
         parent: tk.Widget,
-        on_browse_excel:    Callable[[], None],
-        on_browse_template: Callable[[], None],
-        on_browse_master:   Callable[[], None],
-        on_set_output:      Callable[[], None],
-        on_load_students:   Callable[[], None],
-        on_generate:        Callable[[], None],
+        on_browse_excel:       Callable[[], None],
+        on_browse_template:    Callable[[], None],
+        on_browse_master:      Callable[[], None],
+        on_set_output:         Callable[[], None],
+        on_load_students:      Callable[[], None],
+        on_generate:           Callable[[], None],
+        on_open_output_folder: Callable[[], None],
     ) -> None:
         super().__init__(parent, bg="#dde3ea", pady=5)
 
@@ -39,8 +41,9 @@ class Toolbar(tk.Frame):
         self.master_var   = tk.StringVar()
         self.output_var   = tk.StringVar()
 
-        self._on_load_students = on_load_students
-        self._on_generate      = on_generate
+        self._on_load_students      = on_load_students
+        self._on_generate           = on_generate
+        self._on_open_output_folder = on_open_output_folder
 
         self._build_path_row(on_browse_excel, on_browse_template, on_browse_master, on_set_output)
         self._build_action_row()
@@ -74,11 +77,24 @@ class Toolbar(tk.Frame):
         )
         self.generate_btn.pack(side=tk.LEFT, padx=3)
 
+        ttk.Button(r2, text="📂  Open Output Folder",
+                  command=self._on_open_output_folder).pack(side=tk.LEFT, padx=3)
+
         self.progress_var = tk.DoubleVar()
         ttk.Progressbar(r2, variable=self.progress_var, length=180, maximum=100).pack(side=tk.LEFT, padx=8)
 
         self.progress_lbl = tk.Label(r2, text="", font=("Segoe UI", 9), bg="#dde3ea")
         self.progress_lbl.pack(side=tk.LEFT)
+
+        ttk.Separator(r2, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=10)
+
+        self.reviewed_lbl = tk.Label(r2, text="Reviewed: 0 / 0",
+                                     font=("Segoe UI", 9, "bold"), bg="#dde3ea", fg="#2c3e50")
+        self.reviewed_lbl.pack(side=tk.LEFT, padx=(0, 12))
+
+        self.failed_lbl = tk.Label(r2, text="Failed: 0",
+                                   font=("Segoe UI", 9, "bold"), bg="#dde3ea", fg="#c0392b")
+        self.failed_lbl.pack(side=tk.LEFT)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -104,3 +120,7 @@ class Toolbar(tk.Frame):
 
     def set_progress_label(self, text: str) -> None:
         self.progress_lbl.configure(text=text)
+
+    def set_review_stats(self, reviewed: int, total: int, failed: int) -> None:
+        self.reviewed_lbl.configure(text=f"Reviewed: {reviewed} / {total}")
+        self.failed_lbl.configure(text=f"Failed: {failed}")

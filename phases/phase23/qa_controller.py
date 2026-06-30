@@ -13,6 +13,9 @@ the phase registry in main.py.
 """
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -60,6 +63,7 @@ class QASuiteFrame(ttk.Frame):
             on_set_output=self._set_output,
             on_load_students=self._load_students,
             on_generate=self._on_generate,
+            on_open_output_folder=self._on_open_output_folder,
         )
         self.toolbar.pack(fill=tk.X)
 
@@ -116,10 +120,14 @@ class QASuiteFrame(ttk.Frame):
 
         saved = self.metadata_service.get_students()
         if saved:
+            self.metadata_service.ensure_student_ids(saved)
+            self.metadata_service.ensure_default_status(saved)
             self._students = saved
+            self.metadata_service.save_students(self._students)
             self._rebuild_tree()
             self.toolbar.set_generate_enabled(True)
             self._status_var.set(f"Restored {len(self._students)} students from previous session.")
+        self._update_review_stats()
 
     # ── Student loading ───────────────────────────────────────────────────────
 
@@ -132,10 +140,13 @@ class QASuiteFrame(ttk.Frame):
             self._students = self.slide_updater.load_students_from_excel(
                 paths["excel"], paths["master"]
             )
+            self.metadata_service.ensure_student_ids(self._students)
+            self.metadata_service.ensure_default_status(self._students)
             self.metadata_service.save_students(self._students)
             self._rebuild_tree()
             self.toolbar.set_generate_enabled(bool(self._students))
             self._status_var.set(f"Loaded {len(self._students)} students.")
+            self._update_review_stats()
         except Exception as exc:
             show_error("Load Error", str(exc))
 
@@ -152,6 +163,13 @@ class QASuiteFrame(ttk.Frame):
         name   = f"{s['surname']}, {s['firstname']}"
         course = s["course"][:16] + "…" if len(s["course"]) > 16 else s["course"]
         return (icon, name, course)
+
+    def _update_review_stats(self) -> None:
+        """Pulls the latest status breakdown from disk and pushes it to the toolbar."""
+        stats = self.metadata_service.get_review_statistics()
+        self.toolbar.set_review_stats(
+            stats.get("reviewed", 0), stats.get("total", 0), stats.get("failed", 0)
+        )
 
     # ── Draft generation (threaded) ──────────────────────────────────────────
 
@@ -178,6 +196,10 @@ class QASuiteFrame(ttk.Frame):
                 updated = self.slide_updater.generate_draft(
                     self._students, paths["template"], paths["output"], progress
                 )
+                ts = self.metadata_service.now_iso()
+                for s in updated:
+                    s["pptx_path"]    = paths["output"]
+                    s["last_updated"] = ts
                 self._students = updated
                 self.metadata_service.save_students(self._students)
                 self.after(0, self._on_generate_done)
@@ -192,7 +214,11 @@ class QASuiteFrame(ttk.Frame):
         self.toolbar.set_generate_enabled(True)
         self.toolbar.set_progress(100)
         output = self.toolbar.get_paths()["output"]
-        self._status_var.set(f"✅  Draft PPTX saved to: {output}")
+        self._status_var.set(
+            f"✅ PPTX is live at:\n{output}\n\n"
+            f"Every override performed in Phase 23 updates this file directly."
+        )
+        self._update_review_stats()
         show_info("Done", f"Draft PPTX generated successfully!\n{output}")
 
     # ── Selection & navigation ────────────────────────────────────────────────
@@ -263,6 +289,52 @@ class QASuiteFrame(ttk.Frame):
             f"Face centre set at ({orig_x}, {orig_y}) — click 'Apply Override' to commit."
         )
 
+    # ── Reusable override-application orchestrator ───────────────────────────
+    #
+    # This is the generic workflow described by the Live PPT Reinjection
+    # Infrastructure: given a ready-made image_stream for the currently
+    # selected student, surgically patch ONLY that student's slide, persist
+    # the slide mapping, and refresh ONLY the current row + preview.
+    #
+    # Today's face-click override (_on_apply_override below) still calls
+    # slide_updater.reinject_portrait() directly because it needs to perform
+    # the face-crop itself before an image_stream exists. Any future override
+    # mechanism that already produces a finished image_stream up front — most
+    # notably the planned manual crop/tilt editor — should call this method
+    # instead of reimplementing the lookup/update/persist/refresh sequence.
+
+    def _apply_corrected_image(self, image_stream, new_status: str = "overridden") -> bool:
+        """
+        Applies image_stream as the new portrait for the currently selected
+        student. Returns True on success, False on failure (a user-facing
+        error dialog has already been shown in the failure case).
+        """
+        if self._current_idx < 0:
+            return False
+        s = self._students[self._current_idx]
+        if not self._check_pptx_ready(s):
+            return False
+
+        s["pptx_path"] = self.toolbar.get_paths()["output"]
+
+        try:
+            new_shape_id = self.slide_updater.update_student_slide(s, image_stream)
+        except Exception as exc:
+            show_error("Slide Update Failed", str(exc))
+            return False
+
+        s["portrait_shape_id"] = new_shape_id
+        s["status"]            = new_status
+        self.metadata_service.save_students(self._students)
+
+        if s.get("student_id"):
+            self.metadata_service.set_slide_info(s["student_id"], s["slide_index"], s["pptx_path"])
+
+        self._refresh_tree_row(self._current_idx)
+        self._refresh_preview()
+        self._update_review_stats()
+        return True
+
     # ── Override apply / clear ───────────────────────────────────────────────
 
     def _on_apply_override(self) -> None:
@@ -284,8 +356,13 @@ class QASuiteFrame(ttk.Frame):
             self._pending_center    = None
 
             self.metadata_service.save_students(self._students)
+            if s.get("student_id"):
+                self.metadata_service.set_slide_info(
+                    s["student_id"], s["slide_index"], self.toolbar.get_paths()["output"]
+                )
             self._refresh_tree_row(self._current_idx)
             self._refresh_preview()
+            self._update_review_stats()
             self._status_var.set(f"⚡  Override applied for {s['surname']}, {s['firstname']}.")
         except Exception as exc:
             show_error("Re-injection Error", str(exc))
@@ -310,8 +387,13 @@ class QASuiteFrame(ttk.Frame):
             s["status"]             = "generated"
 
             self.metadata_service.save_students(self._students)
+            if s.get("student_id"):
+                self.metadata_service.set_slide_info(
+                    s["student_id"], s["slide_index"], self.toolbar.get_paths()["output"]
+                )
             self._refresh_tree_row(self._current_idx)
             self._refresh_preview()
+            self._update_review_stats()
             self._status_var.set(f"🔄  Auto-crop restored for {s['surname']}, {s['firstname']}.")
         except Exception as exc:
             show_error("Clear Override Error", str(exc))
@@ -335,3 +417,26 @@ class QASuiteFrame(ttk.Frame):
 
         self.preview.set_apply_enabled(self._pending_center is not None and pptx_ok and slide_ok)
         self.preview.set_clear_enabled(bool(s.get("manual_face_center")) and pptx_ok and slide_ok)
+
+    # ── Open Output Folder ────────────────────────────────────────────────────
+
+    def _on_open_output_folder(self) -> None:
+        output = self.toolbar.get_paths()["output"]
+        if not output or not Path(output).exists():
+            show_warning(
+                "No PPTX Found",
+                "No PowerPoint file has been generated yet.\n"
+                "Generate the draft PPTX first, then try again."
+            )
+            return
+
+        folder = Path(output).parent
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(str(folder))          # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(folder)])
+            else:
+                subprocess.Popen(["xdg-open", str(folder)])
+        except Exception as exc:
+            show_error("Could Not Open Folder", str(exc))
