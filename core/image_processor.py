@@ -120,14 +120,6 @@ class ImageProcessor:
         img_h: int,
         fd_config: dict,
     ) -> tuple | None:
-        """
-        Multi-pass Haar detection with four sanity guards:
-          1. Horizontal centre in middle band.
-          2. Top 60 % of image only (ignores hands, knees).
-          3. Minimum size (rejects noise / dress folds / badges).
-          4. Maximum size (rejects full-body false positives).
-        Returns (x, y, w, h) of the largest valid face, or None.
-        """
         min_frac = fd_config.get("min_face_fraction", 0.08)
         max_frac = fd_config.get("max_face_fraction", 0.80)
         h_margin = fd_config.get("horizontal_margin",  0.15)
@@ -143,9 +135,9 @@ class ImageProcessor:
             for (x, y, w, h) in faces:
                 cx = x + w / 2
                 if not (img_w * h_margin < cx < img_w * (1 - h_margin)): continue
-                if y > img_h * v_limit:                                    continue
-                if w < img_w * min_frac:                                   continue
-                if w > img_w * max_frac:                                   continue
+                if y > img_h * v_limit:                                 continue
+                if w < img_w * min_frac:                                 continue
+                if w > img_w * max_frac:                                 continue
                 valid.append((x, y, w, h))
             if valid:
                 return max(valid, key=lambda f: f[2] * f[3])
@@ -155,7 +147,7 @@ class ImageProcessor:
     def _face_from_manual(center: tuple, img_w: int) -> tuple:
         """Synthesises a face rect from a user-clicked centre point."""
         fcx, fcy = center
-        fw = int(img_w * 0.20)   # assume face is ~20% of image width
+        fw = int(img_w * 0.13)   # assume face is ~13% of image width
         fh = fw
         return (max(0, fcx - fw // 2), max(0, fcy - fh // 2), fw, fh)
 
@@ -168,14 +160,19 @@ class ImageProcessor:
         target_ratio: float,
         fd_config: dict,
     ) -> Image.Image:
-        top_pad = fd_config.get("top_padding_factor",    0.70)
-        bot_pad = fd_config.get("bottom_padding_factor", 1.80)
+        top_pad       = fd_config.get("top_padding_factor",    0.70)
+        bot_pad       = fd_config.get("bottom_padding_factor", 2.80)
+        min_crop_frac = fd_config.get("min_crop_fraction",     0.55)
 
         if face is not None:
             fx, fy, fw, fh = face
-
             crop_top    = max(0,     fy - int(fh * top_pad))
             crop_bottom = min(img_h, fy + fh + int(fh * bot_pad))
+            
+            crop_top, crop_bottom = ImageProcessor._enforce_min_crop_height(
+                crop_top, crop_bottom, img_h, min_crop_frac
+            )
+            
             crop_h      = crop_bottom - crop_top
             crop_w      = int(crop_h * target_ratio)
             face_cx     = fx + fw // 2
@@ -201,6 +198,35 @@ class ImageProcessor:
             new_h = int(img_w / target_ratio)
             top   = (img_h - new_h) // 2
             return rgb.crop((0, top, img_w, top + new_h))
+
+    @staticmethod
+    def _enforce_min_crop_height(
+        crop_top: int, crop_bottom: int, img_h: int, min_crop_frac: float,
+    ) -> tuple[int, int]:
+        """
+        Expands (crop_top, crop_bottom) symmetrically so crop height never
+        drops below min_crop_frac * img_h. Guards against over-zoomed crops
+        from oversized detected face boxes. Clamps to image bounds.
+        """
+        crop_h     = crop_bottom - crop_top
+        min_crop_h = int(img_h * min_crop_frac)
+        if crop_h >= min_crop_h:
+            return crop_top, crop_bottom
+        
+        deficit      = min_crop_h - crop_h
+        crop_top    -= deficit // 2
+        crop_bottom += deficit - deficit // 2
+        
+        if crop_top < 0:
+            crop_bottom -= crop_top    # push shortfall onto the bottom
+            crop_top = 0
+        if crop_bottom > img_h:
+            crop_top -= (crop_bottom - img_h)   # push shortfall onto the top
+            crop_bottom = img_h
+            
+        crop_top    = max(0, crop_top)
+        crop_bottom = min(img_h, crop_bottom)
+        return crop_top, crop_bottom
 
     @staticmethod
     def _to_jpeg_stream(img: Image.Image) -> io.BytesIO:

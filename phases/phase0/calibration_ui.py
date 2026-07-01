@@ -12,7 +12,7 @@ from tkinter import messagebox, scrolledtext, ttk
 
 from core.config_manager import DEFAULT_LAYOUT_CONFIG
 from ui.widgets import (APP_BG, CARD_BG, ACCENT, SUB_FG,
-                         make_header_bar, make_scrollable_frame)
+                        make_header_bar, make_scrollable_frame)
 
 
 class CalibrationFrame(ttk.Frame):
@@ -21,7 +21,7 @@ class CalibrationFrame(ttk.Frame):
     def __init__(self, parent: tk.Widget, app) -> None:
         super().__init__(parent)
         self.app = app
-        self._entries: dict[str, ttk.Entry]      = {}
+        self._entries: dict[str, ttk.Entry]       = {}
         self._mapping_rows: list[tuple]           = []
         self._build_ui()
         self._load_config()
@@ -50,7 +50,7 @@ class CalibrationFrame(ttk.Frame):
         for key, label, default in [
             ("portrait.left_cm",   "Left offset  (left_cm)",    29.79),
             ("portrait.top_cm",    "Top offset   (top_cm)",      2.58),
-            ("portrait.width_cm",  "Width        (width_cm)",   17.27),
+            ("portrait.width_cm",  "Width        (width_cm)",  17.27),
             ("portrait.height_cm", "Height       (height_cm)", 23.43),
         ]:
             self._field_row(card, label, key, default)
@@ -81,16 +81,18 @@ class CalibrationFrame(ttk.Frame):
         card = self._card("🤖  Face Detection Tuning")
         for key, label, default in [
             ("face_detection.top_padding_factor",    "Top padding  (× face height)",          0.70),
-            ("face_detection.bottom_padding_factor", "Bottom padding  (× face height)",        1.80),
+            ("face_detection.bottom_padding_factor", "Bottom padding  (× face height)",        2.80),
             ("face_detection.min_face_fraction",     "Min face size  (fraction of img width)", 0.08),
             ("face_detection.max_face_fraction",     "Max face size  (fraction of img width)", 0.80),
             ("face_detection.horizontal_margin",     "Horizontal exclusion margin",             0.15),
             ("face_detection.vertical_limit",        "Vertical search limit",                  0.60),
+            ("face_detection.min_crop_fraction",     "Min crop height  (fraction of img height)", 0.55),
         ]:
             self._field_row(card, label, key, default)
         tk.Label(card,
                  text="💡  Increase bottom_padding_factor for more torso in the crop.  "
-                      "Raise min_face_fraction if small buttons/badges trigger false detections.",
+                      "Raise min_face_fraction if small buttons/badges trigger false detections.  "
+                      "Raise min_crop_fraction if auto-crops look too tightly zoomed on the face.",
                  font=("Segoe UI", 9, "italic"), fg=SUB_FG, bg=CARD_BG, wraplength=700,
                  ).pack(anchor="w", padx=4, pady=(6, 2))
 
@@ -174,6 +176,16 @@ class CalibrationFrame(ttk.Frame):
                     flat[key] = float(raw) if "." in raw else int(raw)
                 except ValueError:
                     flat[key] = raw
+            
+            frac_key = "face_detection.min_crop_fraction"
+            if frac_key in flat:
+                val = flat[frac_key]
+                if not isinstance(val, (int, float)) or not (0.0 < val <= 1.0):
+                    raise ValueError(
+                        "min_crop_fraction must be a number between 0 and 1 "
+                        "(e.g. 0.55) — got: " + repr(val)
+                    )
+
             config = self.app.config_manager.unflatten(flat)
             config["program_mapping"] = {
                 ce.get().strip().upper(): ne.get().strip()

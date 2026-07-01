@@ -10,7 +10,7 @@ from pathlib import Path
 DEFAULT_LAYOUT_CONFIG: dict = {
     "portrait": {
         "left_cm":   29.79,
-        "top_cm":     2.58,
+        "top_cm":    2.58,
         "width_cm":  17.27,
         "height_cm": 23.43,
     },
@@ -26,11 +26,12 @@ DEFAULT_LAYOUT_CONFIG: dict = {
     },
     "face_detection": {
         "top_padding_factor":    0.70,
-        "bottom_padding_factor": 1.80,
+        "bottom_padding_factor": 2.80,
         "min_face_fraction":     0.08,
         "max_face_fraction":     0.80,
         "horizontal_margin":     0.15,
         "vertical_limit":        0.60,
+        "min_crop_fraction":     0.55,
     },
     "program_mapping": {
         "BMMA":   "Bachelor of Multimedia Arts",
@@ -61,8 +62,21 @@ class ConfigManager:
     def load_layout_config(self) -> dict:
         with open(self._path, "r", encoding="utf-8") as fh:
             data: dict = json.load(fh)
-        for key, val in DEFAULT_LAYOUT_CONFIG.items():
-            data.setdefault(key, val)
+        return self._merge_defaults(data, DEFAULT_LAYOUT_CONFIG)
+
+    @staticmethod
+    def _merge_defaults(data: dict, defaults: dict) -> dict:
+        """
+        Recursively fills any key missing from *data* using *defaults*,
+        without ever overwriting a value the user (or a prior config file)
+        already set. Handles nested dicts (e.g. face_detection.*) so old
+        config files transparently gain new sub-fields like min_crop_fraction.
+        """
+        for key, val in defaults.items():
+            if key not in data:
+                data[key] = val
+            elif isinstance(val, dict) and isinstance(data[key], dict):
+                ConfigManager._merge_defaults(data[key], val)
         return data
 
     def save_layout_config(self, config: dict) -> None:
