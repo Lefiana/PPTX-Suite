@@ -31,7 +31,7 @@ class PreviewPanel(tk.Frame):
         panel = PreviewPanel(
             parent,
             on_select=..., on_canvas_click=...,
-            on_apply=..., on_clear=..., on_prev=..., on_next=...,
+            on_apply=..., on_clear=..., on_prev=..., on_next=..., on_crop_editor=...,
         )
         panel.pack(fill=tk.BOTH, expand=True)
         panel.rebuild_tree(students, row_values_fn)
@@ -41,11 +41,12 @@ class PreviewPanel(tk.Frame):
         self,
         parent: tk.Widget,
         on_select:       Callable[[], None],
-        on_canvas_click: Callable[[int, int], None],   # (orig_x, orig_y)
+        on_canvas_click: Callable[[int, int], None],  # (orig_x, orig_y)
         on_apply:        Callable[[], None],
         on_clear:        Callable[[], None],
         on_prev:         Callable[[], None],
         on_next:         Callable[[], None],
+        on_crop_editor:  Callable[[], None],
     ) -> None:
         super().__init__(parent, bg=APP_BG)
 
@@ -62,7 +63,7 @@ class PreviewPanel(tk.Frame):
         self._orig_photo:    Optional[ImageTk.PhotoImage] = None
 
         self._build_student_list()
-        self._build_right_panel(on_apply, on_clear, on_prev, on_next)
+        self._build_right_panel(on_apply, on_clear, on_prev, on_next, on_crop_editor)
 
     # ── Construction ──────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ class PreviewPanel(tk.Frame):
         frm.pack_propagate(False)
 
         tk.Label(frm, text="Student Queue", font=("Segoe UI", 11, "bold"),
-                bg=APP_BG, fg="#2c3e50").pack(anchor="w", pady=(0, 4))
+                 bg=APP_BG, fg="#2c3e50").pack(anchor="w", pady=(0, 4))
 
         cols = ("st", "name", "course")
         self.tree = ttk.Treeview(frm, columns=cols, show="headings",
@@ -93,7 +94,7 @@ class PreviewPanel(tk.Frame):
 
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._on_select())
 
-    def _build_right_panel(self, on_apply, on_clear, on_prev, on_next) -> None:
+    def _build_right_panel(self, on_apply, on_clear, on_prev, on_next, on_crop_editor) -> None:
         right = tk.Frame(self, bg=APP_BG)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 10), pady=10)
 
@@ -102,7 +103,7 @@ class PreviewPanel(tk.Frame):
 
         self._build_preview_panel(panels)
         self._build_click_panel(panels)
-        self._build_action_bar(right, on_apply, on_clear, on_prev, on_next)
+        self._build_action_bar(right, on_apply, on_clear, on_prev, on_next, on_crop_editor)
 
     def _build_preview_panel(self, parent: tk.Frame) -> None:
         card = ttk.LabelFrame(parent, text="🖼  Cropped Portrait Preview  (PPTX result)", padding=8)
@@ -137,7 +138,7 @@ class PreviewPanel(tk.Frame):
         tk.Label(card, textvariable=self.face_var, font=("Segoe UI", 9),
                 fg="#e67e22", bg=APP_BG).pack()
 
-    def _build_action_bar(self, parent: tk.Frame, on_apply, on_clear, on_prev, on_next) -> None:
+    def _build_action_bar(self, parent: tk.Frame, on_apply, on_clear, on_prev, on_next, on_crop_editor) -> None:
         bar = tk.Frame(parent, bg=APP_BG)
         bar.pack(fill=tk.X, pady=(6, 0))
 
@@ -148,6 +149,10 @@ class PreviewPanel(tk.Frame):
         self.clear_btn = ttk.Button(bar, text="🔄  Clear Override (use auto)",
                                     command=on_clear, state=tk.DISABLED)
         self.clear_btn.pack(side=tk.LEFT, padx=4)
+
+        self.crop_editor_btn = ttk.Button(bar, text="✏️  Manual Crop & Tilt Editor",
+                                          command=on_crop_editor, state=tk.DISABLED)
+        self.crop_editor_btn.pack(side=tk.LEFT, padx=4)
 
         ttk.Separator(bar, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=8)
         ttk.Button(bar, text="◀  Prev", command=on_prev).pack(side=tk.LEFT, padx=2)
@@ -250,6 +255,9 @@ class PreviewPanel(tk.Frame):
 
     def set_clear_enabled(self, enabled: bool) -> None:
         self.clear_btn.configure(state=tk.NORMAL if enabled else tk.DISABLED)
+
+    def set_crop_editor_enabled(self, enabled: bool) -> None:
+        self.crop_editor_btn.configure(state=tk.NORMAL if enabled else tk.DISABLED)
 
     # ── Click handler (geometry → callback) ──────────────────────────────────
 

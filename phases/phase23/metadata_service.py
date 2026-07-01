@@ -22,9 +22,9 @@ from typing import Optional
 
 # Status → (tree-tag colour, unicode icon)
 STATUS_META: dict[str, tuple[str, str]] = {
-    "pending":     ("#95a5a6", "⬜"),
-    "generated":   ("#27ae60", "✅"),
-    "overridden":  ("#e67e22", "⚡"),
+    "pending":    ("#95a5a6", "⬜"),
+    "generated":  ("#27ae60", "✅"),
+    "overridden": ("#e67e22", "⚡"),
     "placeholder": ("#e74c3c", "⚠️"),
     "failed":      ("#c0392b", "❌"),
     "skipped":     ("#7f8c8d", "⏭"),
@@ -166,6 +166,19 @@ class MetadataService:
     def update_last_updated(self, student_id: str) -> bool:
         """Stamps last_updated to now without touching any other field."""
         return self.update_student(student_id, {"last_updated": self.now_iso()})
+
+    # ── Crop-editor params (manual crop/tilt overrides) ──────────────────────
+    def get_crop_params(self, student_id: str) -> Optional[dict]:
+        """Returns the saved {'x','y','w','h','rotation'} dict, or None."""
+        s = self.get_student(student_id)
+        return s.get("crop_params") if s else None
+
+    def set_crop_params(self, student_id: str, crop_params: Optional[dict]) -> bool:
+        """Persists crop_params (pass None to clear) and stamps last_updated."""
+        return self.update_student(student_id, {
+            "crop_params":  crop_params,
+            "last_updated": self.now_iso(),
+        })
 
     # ── Review statistics ─────────────────────────────────────────────────────
 

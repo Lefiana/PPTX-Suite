@@ -41,12 +41,6 @@ class ImageProcessor:
     ) -> io.BytesIO:
         """
         Returns a BytesIO JPEG of the cropped portrait.
-
-        Args:
-            image_path:         Path to source image (or missing placeholder).
-            target_ratio:       width / height from layout_config["portrait"].
-            fd_config:          dict from layout_config["face_detection"].
-            manual_face_center: (x, y) in original-image pixel coords, or None.
         """
         rgb = self._safe_open(image_path)
         if rgb is None:
@@ -60,6 +54,51 @@ class ImageProcessor:
             best_face = self._detect_face(rgb, img_w, img_h, fd_config)
 
         cropped = self._apply_crop(rgb, best_face, img_w, img_h, target_ratio, fd_config)
+        return self._to_jpeg_stream(cropped)
+
+    def load_working_image(self, image_path: str, target_ratio: float) -> Image.Image:
+        """
+        Public accessor for the crop editor: returns the base RGB image (or
+        a placeholder if the file is missing/unreadable) it will interactively
+        rotate/crop from.
+        """
+        rgb = self._safe_open(image_path)
+        return rgb if rgb is not None else self._make_placeholder(target_ratio)
+
+    def crop_with_params(
+        self,
+        image_path: str,
+        crop_params: dict,
+        target_ratio: float,
+        fd_config: dict | None = None,
+    ) -> io.BytesIO:
+        """
+        Manual Crop & Tilt Editor entry point. 
+        Applies rotation and enforces min_crop_fraction guards if fd_config is provided.
+        """
+        working = self.load_working_image(image_path, target_ratio)
+        rotation = float(crop_params.get("rotation", 0.0) or 0.0)
+        if rotation:
+            working = working.rotate(
+                -rotation, resample=Image.BICUBIC, expand=True, fillcolor=(255, 255, 255)
+            )
+        img_w, img_h = working.size
+        x = float(crop_params.get("x", 0))
+        y = float(crop_params.get("y", 0))
+        w = float(crop_params.get("w", img_w))
+        h = float(crop_params.get("h", img_h))
+
+        # Defensively re-lock the aspect ratio from height
+        if h > 0:
+            w = h * target_ratio
+        if fd_config:
+            min_frac = fd_config.get("min_crop_fraction", 0.55)
+            top, bottom = self._enforce_min_crop_height(int(y), int(y + h), img_h, min_frac)
+            y, h = top, bottom - top
+            w = h * target_ratio
+            
+        left, top_, right, bottom = self._clamp_rect(x, y, w, h, img_w, img_h)
+        cropped = working.crop((left, top_, right, bottom))
         return self._to_jpeg_stream(cropped)
 
     def get_preview_pil(
@@ -89,6 +128,17 @@ class ImageProcessor:
         return rgb
 
     # ── Internal helpers ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _clamp_rect(x, y, w, h, img_w, img_h) -> tuple[int, int, int, int]:
+        """
+        Clamps a floating (x, y, w, h) rect fully inside (img_w, img_h).
+        """
+        w = min(w, img_w)
+        h = min(h, img_h)
+        x = max(0, min(x, img_w - w))
+        y = max(0, min(y, img_h - h))
+        return int(x), int(y), int(x + w), int(y + h)
 
     @staticmethod
     def _safe_open(image_path: str) -> Image.Image | None:
