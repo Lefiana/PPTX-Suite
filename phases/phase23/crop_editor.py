@@ -69,7 +69,7 @@ class CropEditorWindow(tk.Toplevel):
     HANDLE_OFFSET       = 36    # rotation-handle distance above the top edge, in rotated-space px
     ROTATION_MIN        = -15.0
     ROTATION_MAX        = 15.0
-    ROTATION_SNAP_DEG   = 5.0
+    ROTATION_SNAP_DEG   = 1.0
     PREVIEW_MAX_DIM     = 500   # live-preview working image is downscaled for smooth dragging
 
     def __init__(
